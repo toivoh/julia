@@ -1062,10 +1062,13 @@ parse_float(x::String) = float64(x)
 parse_float(::Type{Float64}, x::String) = float64(x)
 parse_float(::Type{Float32}, x::String) = float32(x)
 
-for conv in (:float, :float32, :float64,
-             :int, :int8, :int16, :int32, :int64,
-             :uint, :uint8, :uint16, :uint32, :uint64)
-    @eval ($conv){S<:String}(a::AbstractArray{S}) = map($conv, a)
+let
+    for conv in (:float, :float32, :float64,
+                 :int, :int8, :int16, :int32, :int64,
+                 :uint, :uint8, :uint16, :uint32, :uint64)
+        println("conv: $conv")
+        @eval ($conv){S<:String}(a::AbstractArray{S}) = map($conv, a)
+    end
 end
 
 # lexicographically compare byte arrays (used by Latin-1 and UTF-8)
