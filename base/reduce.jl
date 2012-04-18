@@ -78,6 +78,24 @@ function prod(itr)
     return v
 end
 
+# return common value of f(x) for x in itr, if it exists; error otherwise
+function same(f::Function, itr)
+    s = start(itr)
+    if done(itr, s)
+        error("same: need at least one element!")
+    end
+    (x, s) = next(itr, s)
+    y = f(x) 
+    while !done(itr, s)
+        (x, s) = next(itr, s)
+	if (yk = f(x)) != y
+	    error("same: $f(x) not same for all elements: $y != $yk")
+	end        
+    end
+    return y
+end
+same(c) = same(identity, c)
+
 function reduce(op::Function, v0, itr)
     v = v0
     if is(op,max)
