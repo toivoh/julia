@@ -1218,7 +1218,7 @@ end
 
 ## N argument
 function map_to(dest::StridedArray, f, As::StridedArray...)
-    n = numel(As[1])
+    n = same(numel, As)
     i = 1
     ith = a->a[i]
     for i=1:n
@@ -1227,7 +1227,7 @@ function map_to(dest::StridedArray, f, As::StridedArray...)
     return dest
 end
 function map_to2(first, dest::StridedArray, f, As::StridedArray...)
-    n = numel(As[1])
+    n = same(numel, As)
     i = 1
     ith = a->a[i]
     dest[1] = first
@@ -1238,7 +1238,7 @@ function map_to2(first, dest::StridedArray, f, As::StridedArray...)
 end
 
 function map(f, As::StridedArray...)
-    if isempty(As[1]); return As[1]; end
+    if same(isempty, As); return As[1]; end
     first = f(map(a->a[1], As)...)
     dest = similar(As[1], typeof(first))
     return map_to2(first, dest, f, As...)
