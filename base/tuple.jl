@@ -43,6 +43,7 @@ map(f, t::(Any,Any,Any,Any), s::(Any,Any,Any,Any)) =
 #map(f, ts::Tuple...) = ntuple(length(ts[1]), n->f(map(t->t[n],ts)...))
 map(f, ts::Tuple...) = ntuple(__map_checked_common_length(ts), 
                               n->f(map(t->t[n],ts)...) )
+
 function __map_checked_common_length(args) 
     n = length(args[1])
     for i=2:length(args)
@@ -50,7 +51,7 @@ function __map_checked_common_length(args)
             error("map: all arguments must be same length!")
         end
     end
-    ntuple(n, i->f(map(t->t[i],ts)...))
+    n
 end
 
 
