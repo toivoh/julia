@@ -1166,13 +1166,23 @@ function map_to2(first, dest::StridedArray, f,
     return dest
 end
 
+# function map(f, A::StridedArray, B::StridedArray)
+#     shp = promote_shape(size(A),size(B))
+#     if isempty(A); return A; end
+#     first = f(A[1], B[1])
+#     dest = similar(A, typeof(first), shp)
+#     return map_to2(first, dest, f, A, B)
+# end
 function map(f, A::StridedArray, B::StridedArray)
     shp = promote_shape(size(A),size(B))
-    if isempty(A); return A; end
+    if isempty(A)
+        return similar(A, eltype(A), shp)
+    end
     first = f(A[1], B[1])
     dest = similar(A, typeof(first), shp)
     return map_to2(first, dest, f, A, B)
 end
+
 
 function map_to(dest::StridedArray, f, A::StridedArray, B::Number)
     for i=1:numel(A)
@@ -1216,9 +1226,38 @@ function map(f, A::Number, B::StridedArray)
     return map_to2(first, dest, f, A, B)
 end
 
+# ## N argument
+# function map_to(dest::StridedArray, f, As::StridedArray...)
+#     n = numel(As[1])
+#     i = 1
+#     ith = a->a[i]
+#     for i=1:n
+#         dest[i] = f(map(ith, As)...)
+#     end
+#     return dest
+# end
+# function map_to2(first, dest::StridedArray, f, As::StridedArray...)
+#     n = numel(As[1])
+#     i = 1
+#     ith = a->a[i]
+#     dest[1] = first
+#     for i=2:n
+#         dest[i] = f(map(ith, As)...)
+#     end
+#     return dest
+# end
+
+# function map(f, As::StridedArray...)
+#     if isempty(As[1]); return As[1]; end
+#     first = f(map(a->a[1], As)...)
+#     dest = similar(As[1], typeof(first))
+#     return map_to2(first, dest, f, As...)
+# end
+
 ## N argument
 function map_to(dest::StridedArray, f, As::StridedArray...)
     n = numel(As[1])
+#    n = numel(dest)
     i = 1
     ith = a->a[i]
     for i=1:n
@@ -1228,6 +1267,7 @@ function map_to(dest::StridedArray, f, As::StridedArray...)
 end
 function map_to2(first, dest::StridedArray, f, As::StridedArray...)
     n = numel(As[1])
+#    n = numel(dest)
     i = 1
     ith = a->a[i]
     dest[1] = first
@@ -1238,9 +1278,14 @@ function map_to2(first, dest::StridedArray, f, As::StridedArray...)
 end
 
 function map(f, As::StridedArray...)
-    if isempty(As[1]); return As[1]; end
+    #if isempty(As[1]); return As[1]; end
+    shape = mapreduce(promote_shape, size, As)
+    if prod(shape) == 0
+        return similar(As[1], eltype(As[1]), shape)
+    end
     first = f(map(a->a[1], As)...)
-    dest = similar(As[1], typeof(first))
+    #dest = similar(As[1], typeof(first))
+    dest = similar(As[1], typeof(first), shape)
     return map_to2(first, dest, f, As...)
 end
 
