@@ -37,10 +37,16 @@ end
 
 # map cell array
 map(f, a::Array{Any,1}) = { f(a[i]) | i=1:length(a) }
+# map(f, a::Array{Any,1}, b::Array{Any,1}) =
+#     { f(a[i],b[i]) | i=1:min(length(a),length(b)) }
+# function map(f, as::Array{Any,1}...)
+#     n = min(length, as)
+#     { f(map(a->a[i],as)...) | i=1:n }
+# end
 map(f, a::Array{Any,1}, b::Array{Any,1}) =
-    { f(a[i],b[i]) | i=1:min(length(a),length(b)) }
+    { f(a[i],b[i]) | i=1:__map_checked_common_length((a, b)) }
 function map(f, as::Array{Any,1}...)
-    n = min(length, as)
+    n = __map_checked_common_length(as)
     { f(map(a->a[i],as)...) | i=1:n }
 end
 
