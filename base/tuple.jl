@@ -40,7 +40,17 @@ map(f, t::(Any,Any,Any), s::(Any,Any,Any)) =
 map(f, t::(Any,Any,Any,Any), s::(Any,Any,Any,Any)) =
     (f(t[1],s[1]), f(t[2],s[2]), f(t[3],s[3]), f(t[4],s[4]))
 # n argument function
-map(f, ts::Tuple...) = ntuple(length(ts[1]), n->f(map(t->t[n],ts)...))
+#map(f, ts::Tuple...) = ntuple(length(ts[1]), n->f(map(t->t[n],ts)...))
+function map(f, ts::Tuple...) 
+    n = length(ts[1])
+    for i=2:length(ts)
+        if length(ts[i]) != n
+            error("map: all arguments must be same length!")
+        end
+    end
+    ntuple(n, i->f(map(t->t[i],ts)...))
+end
+
 
 ## comparison ##
 
