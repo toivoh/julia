@@ -187,7 +187,52 @@ function ref(A::Array, I::Integer...)
 end
 
 # note: this is also useful for Ranges
-ref{T<:Integer}(A::Vector, I::AbstractVector{T}) = [ A[i] | i=I ]
+# let
+#     for TA in (Vector, AbstractVector)
+#         @eval function ref{T<:Integer}(A::$TA, I::AbstractVector{T})
+#             dim = length(I)
+#             X = similar(A, eltype(A), dim)
+#             for ind_i=1:dim
+#                 X[i] = A[I[i]]
+#             end
+#             X
+#         end
+#     end
+# end
+# function ref{T<:Integer}(A::Matrix, I::AbstractVector{T}, j::Integer)
+#    dim = length(I)
+#     X = similar(A, eltype(A), dim)
+#     for i=1:dim[1]
+#         X[i] = A[I[i], j]
+#     end
+#     X
+# end
+# function ref{T<:Integer}(A::Matrix, i::Integer, J::AbstractVector{T})
+#    dims = (1, length(J))
+#     X = similar(A, eltype(A), dims)
+#     for j=1:dims[2]
+#         X[1,j] = A[i, J[j]]
+#     end
+#     X
+# end
+# function ref{T<:Integer}(A::Matrix, I::AbstractVector{T}, J::AbstractVector{T})
+#    dims = (length(I), length(J))
+#     X = similar(A, eltype(A), dims)
+#     for j=1:dims[2], i=1:dims[1]
+#         X[i,j] = A[I[i], J[j]]
+#     end
+#     X
+# end
+
+function ref{T<:Integer}(A::Vector, I::AbstractVector{T})
+    dim = length(I)
+    X = similar(A, eltype(A), dim)
+    for ind_i=1:dim
+        X[ind_i] = A[I[ind_i]]
+    end
+    X
+end
+# ref{T<:Integer}(A::Vector, I::AbstractVector{T}) = [ A[i] | i=I ]
 ref{T<:Integer}(A::AbstractVector, I::AbstractVector{T}) = [ A[i] | i=I ]
 
 ref{T<:Integer}(A::Matrix, I::AbstractVector{T}, j::Integer) = [ A[i,j] | i=I ]
