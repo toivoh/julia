@@ -8,7 +8,7 @@ DSFMT_VER = 2.1
 OPENBLAS_VER = v0.1.1
 LAPACK_VER = 3.4.1
 ARPACK_VER = 3.1.0
-FFTW_VER = 3.3.1
+FFTW_VER = 3.3.2
 SUITESPARSE_VER = 3.7.0
 CLP_VER = 1.14.5
 UNWIND_VER = 1.0.1
@@ -519,7 +519,7 @@ fftw-$(FFTW_VER)-single/configure: fftw-$(FFTW_VER).tar.gz
 	touch $@
 fftw-$(FFTW_VER)-single/config.status: fftw-$(FFTW_VER)-single/configure
 	cd fftw-$(FFTW_VER)-single && \
-	./configure --prefix=$(abspath $(USR)) $(FFTW_CONFIG) --enable-shared --disable-fortran --enable-sse --enable-single --enable-threads && \
+	./configure --prefix=$(abspath $(USR)) $(FFTW_CONFIG) --enable-sse --enable-single && \
 	$(MAKE) clean
 	touch $@
 $(FFTW_SINGLE_OBJ_TARGET): fftw-$(FFTW_VER)-single/config.status
