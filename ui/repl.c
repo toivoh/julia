@@ -101,6 +101,12 @@ void parse_opts(int *argcp, char ***argvp) {
 #ifdef JL_SYSTEM_IMAGE_PATH
     if (image_file && !imagepathspecified) {
         image_file = JL_SYSTEM_IMAGE_PATH;
+        if (image_file[0] != PATHSEP) {
+            char path[512];
+            snprintf(path, sizeof(path), "%s%s%s",
+                     julia_home, PATHSEPSTRING, JL_SYSTEM_IMAGE_PATH);
+            image_file = strdup(path);
+        }
     }
 #endif
 }
@@ -123,8 +129,8 @@ static int exec_program(void)
     JL_TRY {
         jl_register_toplevel_eh();
         if (err) {
-            jl_show(jl_exception_in_transit);
-            ios_printf(ios_stdout, "\n");
+            jl_show(jl_stderr_obj(), jl_exception_in_transit);
+            ios_printf(ios_stderr, "\n");
             JL_EH_POP();
             return 1;
         }
@@ -208,8 +214,8 @@ int true_main(int argc, char *argv[])
     ;
     JL_TRY {
         if (iserr) {
-            jl_show(jl_exception_in_transit);
-            ios_printf(ios_stdout, "\n\n");
+            jl_show(jl_stderr_obj(), jl_exception_in_transit);
+            ios_printf(ios_stderr, "\n\n");
             iserr = 0;
         }
         while (1) {
@@ -220,7 +226,7 @@ int true_main(int argc, char *argv[])
             }
             jl_value_t *ast = jl_parse_input_line(input);
             jl_value_t *value = jl_toplevel_eval(ast);
-            jl_show(value);
+            jl_show(jl_stdout_obj(), value);
             ios_printf(ios_stdout, "\n\n");
         }
     }

@@ -232,12 +232,12 @@ function ref{T<:Integer}(A::Vector, I::AbstractVector{T})
     end
     X
 end
-# ref{T<:Integer}(A::Vector, I::AbstractVector{T}) = [ A[i] | i=I ]
-ref{T<:Integer}(A::AbstractVector, I::AbstractVector{T}) = [ A[i] | i=I ]
+#ref{T<:Integer}(A::Vector, I::AbstractVector{T}) = [ A[i] for i=I ]
+ref{T<:Integer}(A::AbstractVector, I::AbstractVector{T}) = [ A[i] for i=I ]
 
-ref{T<:Integer}(A::Matrix, I::AbstractVector{T}, j::Integer) = [ A[i,j] | i=I ]
-ref{T<:Integer}(A::Matrix, I::Integer, J::AbstractVector{T}) = [ A[i,j] | i=I, j=J ]
-ref{T<:Integer}(A::Matrix, I::AbstractVector{T}, J::AbstractVector{T}) = [ A[i,j] | i=I, j=J ]
+ref{T<:Integer}(A::Matrix, I::AbstractVector{T}, j::Integer) = [ A[i,j] for i=I ]
+ref{T<:Integer}(A::Matrix, I::Integer, J::AbstractVector{T}) = [ A[i,j] for i=I, j=J ]
+ref{T<:Integer}(A::Matrix, I::AbstractVector{T}, J::AbstractVector{T}) = [ A[i,j] for i=I, j=J ]
 
 let ref_cache = nothing
 global ref
@@ -642,13 +642,13 @@ end
 
 # ^ is difficult, since negative exponents give a different type
 
-./(x::Array, y::Array ) = reshape( [ x[i] ./ y[i] | i=1:numel(x) ], size(x) )
-./(x::Number,y::Array ) = reshape( [ x    ./ y[i] | i=1:numel(y) ], size(y) )
-./(x::Array, y::Number) = reshape( [ x[i] ./ y    | i=1:numel(x) ], size(x) )
+./(x::Array, y::Array ) = reshape( [ x[i] ./ y[i] for i=1:numel(x) ], size(x) )
+./(x::Number,y::Array ) = reshape( [ x    ./ y[i] for i=1:numel(y) ], size(y) )
+./(x::Array, y::Number) = reshape( [ x[i] ./ y    for i=1:numel(x) ], size(x) )
 
-.^(x::Array, y::Array ) = reshape( [ x[i] ^ y[i] | i=1:numel(x) ], size(x) )
-.^(x::Number,y::Array ) = reshape( [ x    ^ y[i] | i=1:numel(y) ], size(y) )
-.^(x::Array, y::Number) = reshape( [ x[i] ^ y    | i=1:numel(x) ], size(x) )
+.^(x::Array, y::Array ) = reshape( [ x[i] ^ y[i] for i=1:numel(x) ], size(x) )
+.^(x::Number,y::Array ) = reshape( [ x    ^ y[i] for i=1:numel(y) ], size(y) )
+.^(x::Array, y::Number) = reshape( [ x[i] ^ y    for i=1:numel(x) ], size(x) )
 
 function .^{S<:Integer,T<:Integer}(A::Array{S}, B::Array{T})
     F = Array(Float64, promote_shape(size(A), size(B)))
@@ -741,29 +741,45 @@ end
 
 ## Binary comparison operators ##
 
-for f in (:(==), :!=, :<, :<=)
+function _jl_compare_array_to_array(isf::Function, A::Array, B::Array)
+    F = Array(Bool, promote_shape(size(A),size(B)))
+    for i = 1:numel(B)
+        F[i] = isf(A[i], B[i])
+    end
+    return F
+end
+function _jl_compare_scalar_to_array(isf::Function, A, B::Array)
+    F = similar(B, Bool)
+    for i = 1:numel(B)
+        F[i] = isf(A, B[i])
+    end
+    return F
+end
+function _jl_compare_array_to_scalar(isf::Function, A::Array, B)
+    F = similar(A, Bool)
+    for i = 1:numel(A)
+        F[i] = isf(A[i], B)
+    end
+    return F
+end
+# TODO: restrict scalar/array comparisons as soon as issue #804 is
+#       solved.
+#       we need to substitute:
+#           ($f)(A, B::Array) = _jl_compare_scalar_to_array($isf, A, B)
+#       with:
+#           ($f){T}(A::T, B::Array{T}) = _jl_compare_scalar_to_array($isf, A, B)
+#       etc.
+#       (and then add spcialized String versions, similar to those for Numbers)
+#
+for (f,isf) in ((:(==),:isequal), (:(<), :isless),
+        (:(!=),:((x,y)->!isequal(x,y))), (:(<=), :((x,y)->!isless(y,x))))
     @eval begin
-        function ($f)(A::Array, B::Array)
-            F = Array(Bool, promote_shape(size(A),size(B)))
-            for i = 1:numel(A)
-                F[i] = ($f)(A[i], B[i])
-            end
-            return F
-        end
-        function ($f)(A::Number, B::Array)
-            F = similar(B, Bool)
-            for i = 1:numel(B)
-                F[i] = ($f)(A, B[i])
-            end
-            return F
-        end
-        function ($f)(A::Array, B::Number)
-            F = similar(A, Bool)
-            for i = 1:numel(A)
-                F[i] = ($f)(A[i], B)
-            end
-            return F
-        end
+        ($f)(A::Array, B::Array) = _jl_compare_array_to_array($isf, A, B)
+        ($f){T<:Number,S<:Number}(A::Array{T}, B::Array{S}) = _jl_compare_array_to_array($f, A, B)
+        ($f)(A, B::Array) = _jl_compare_scalar_to_array($isf, A, B)
+        ($f){T<:Number,S<:Number}(A::T, B::Array{S}) = _jl_compare_scalar_to_array($f, A, B)
+        ($f)(A::Array, B) = _jl_compare_array_to_scalar($isf, A, B)
+        ($f){T<:Number,S<:Number}(A::Array{T}, B::S) = _jl_compare_array_to_scalar($f, A, B)
     end
 end
 
@@ -894,7 +910,7 @@ rotr90(A::AbstractMatrix, k::Integer) = rotl90(A,-k)
 rot180(A::AbstractMatrix, k::Integer) = k % 2 == 1 ? rot180(A) : copy(A)
 const rot90 = rotl90
 
-reverse(v::StridedVector) = (n=length(v); [ v[n-i+1] | i=1:n ])
+reverse(v::StridedVector) = (n=length(v); [ v[n-i+1] for i=1:n ])
 function reverse!(v::StridedVector)
     n = length(v)
     r = n
@@ -949,7 +965,7 @@ end
 
 let findn_cache = nothing
 function findn_one(ivars)
-    s = { quote I[$i][count] = $ivars[i] end | i = 1:length(ivars)}
+    s = { quote I[$i][count] = $ivars[i] end for i = 1:length(ivars)}
     quote
     	Aind = A[$(ivars...)]
     	if Aind != z
@@ -1022,11 +1038,11 @@ areduce{T}(f::Function, A::StridedArray{T}, region::Region, v0) =
 let areduce_cache = nothing
 # generate the body of the N-d loop to compute a reduction
 function gen_areduce_func(n, f)
-    ivars = { gensym() | i=1:n }
+    ivars = { gensym() for i=1:n }
     # limits and vars for reduction loop
-    lo    = { gensym() | i=1:n }
-    hi    = { gensym() | i=1:n }
-    rvars = { gensym() | i=1:n }
+    lo    = { gensym() for i=1:n }
+    hi    = { gensym() for i=1:n }
+    rvars = { gensym() for i=1:n }
     setlims = { quote
         # each dim of reduction is either 1:sizeA or ivar:ivar
         if contains(region,$i)
@@ -1035,8 +1051,8 @@ function gen_areduce_func(n, f)
         else
             $lo[i] = $hi[i] = $ivars[i]
         end
-               end | i=1:n }
-    rranges = { :( ($lo[i]):($hi[i]) ) | i=1:n }  # lo:hi for all dims
+               end for i=1:n }
+    rranges = { :( ($lo[i]):($hi[i]) ) for i=1:n }  # lo:hi for all dims
     body =
     quote
         _tot = v0
@@ -1050,7 +1066,7 @@ function gen_areduce_func(n, f)
         local _F_
         function _F_(f, A, region, R, v0)
             _ind = 1
-            $make_loop_nest(ivars, { :(1:size(R,$i)) | i=1:n }, body)
+            $make_loop_nest(ivars, { :(1:size(R,$i)) for i=1:n }, body)
         end
         _F_
     end
@@ -1312,7 +1328,7 @@ function transpose{T<:Union(Float64,Float32,Complex128,Complex64)}(A::Matrix{T})
     if numel(A) > 50000
         return _jl_fftw_transpose(reshape(A, size(A, 2), size(A, 1)))
     else
-        return [ A[j,i] | i=1:size(A,2), j=1:size(A,1) ]
+        return [ A[j,i] for i=1:size(A,2), j=1:size(A,1) ]
     end
 end
 
@@ -1320,11 +1336,11 @@ ctranspose{T<:Real}(A::StridedVecOrMat{T}) = transpose(A)
 
 ctranspose(x::StridedVecOrMat) = transpose(x)
 
-transpose(x::StridedVector) = [ x[j] | i=1, j=1:size(x,1) ]
-transpose(x::StridedMatrix) = [ x[j,i] | i=1:size(x,2), j=1:size(x,1) ]
+transpose(x::StridedVector) = [ x[j] for i=1, j=1:size(x,1) ]
+transpose(x::StridedMatrix) = [ x[j,i] for i=1:size(x,2), j=1:size(x,1) ]
 
-ctranspose{T<:Number}(x::StridedVector{T}) = [ conj(x[j]) | i=1, j=1:size(x,1) ]
-ctranspose{T<:Number}(x::StridedMatrix{T}) = [ conj(x[j,i]) | i=1:size(x,2), j=1:size(x,1) ]
+ctranspose{T<:Number}(x::StridedVector{T}) = [ conj(x[j]) for i=1, j=1:size(x,1) ]
+ctranspose{T<:Number}(x::StridedMatrix{T}) = [ conj(x[j,i]) for i=1:size(x,2), j=1:size(x,1) ]
 
 ## Permute ##
 
@@ -1341,7 +1357,7 @@ function permute(A::StridedArray, perm)
     end
 
     #calculates all the strides
-    strides = [ stride(A, perm[dim]) | dim = 1:length(perm) ]
+    strides = [ stride(A, perm[dim]) for dim = 1:length(perm) ]
 
     #Creates offset, because indexing starts at 1
     offset = 0
@@ -1352,7 +1368,7 @@ function permute(A::StridedArray, perm)
 
     function permute_one(ivars)
         len = length(ivars)
-        counts = { gensym() | i=1:len}
+        counts = { gensym() for i=1:len}
         toReturn = cell(len+1,2)
         for i = 1:numel(toReturn)
             toReturn[i] = nothing
