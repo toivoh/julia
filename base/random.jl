@@ -1,8 +1,10 @@
 _jl_librandom = dlopen("librandom")
+@windows_only _jl_advapi32 = dlopen("Advapi32")
 
 ## initialization
 
 function _jl_librandom_init()
+@unix_only begin
     try
         srand("/dev/urandom")
     catch
@@ -17,6 +19,12 @@ function _jl_librandom_init()
         srand(seed)
     end
     _jl_randn_zig_init()
+end
+@windows_only begin
+    a=zeros(Uint32,2)
+    ccall(dlsym(_jl_advapi32,:SystemFunction036),stdcall,Uint8,(Ptr{Void},Uint64),convert(Ptr{Void},a),8)
+    srand(a)
+end
 end
 
 # macros to generate random arrays
@@ -44,8 +52,8 @@ macro _jl_rand_matrix_builder_1arg(T, f)
             end
             return A
         end
-        ($f)(arg, dims::Dims) = ($f!)(arg, Array($T, dims))
-        ($f)(arg, dims::Int...) = ($f)(arg, dims)
+        ($f)(arg::Number, dims::Dims) = ($f!)(arg, Array($T, dims))
+        ($f)(arg::Number, dims::Int...) = ($f)(arg, dims)
     end
 end
 
@@ -79,6 +87,8 @@ srand(filename::String) = srand(filename, 4)
 
 ## rand()
 
+rand() = ccall(dlsym(_jl_librandom, :dsfmt_gv_genrand_close_open), Float64, ())
+
 const _jl_dsfmt_get_min_array_size =
     ccall(dlsym(_jl_librandom, :dsfmt_get_min_array_size), Int32, ())
 
@@ -98,7 +108,6 @@ function rand!(A::Array{Float64})
     return A
 end
 
-rand() = ccall(dlsym(_jl_librandom, :dsfmt_gv_genrand_close_open), Float64, ())
 rand(dims::Dims) = rand!(Array(Float64, dims))
 rand(dims::Int...) = rand(dims)
 
@@ -208,21 +217,23 @@ const exprnd = randexp
 
 function randg(a::Real)
     d = a - 1.0/3.0
-    c = 1.0 / sqrt(9*d)
-    while(true)
-        x = randn()
-        v = 1.0 + c*x
-        while (v <= 0.0)
+    c = 1.0/sqrt(9d)
+    x = 0.0
+    while true
+        v = 0.0
+        while v <= 0.0
             x = randn()
             v = 1.0 + c*x
         end
-        v = v*v*v
+        v = v^3
         U = rand()
-        x2 = x*x
-        if U < 1.0 - 0.331*x2*x2; return d*v; end
-        if log(U) < 0.5*x2 + d*(1.0 - v + log(v)); return d*v; end
+        x2 = x^2
+        if U < 1.0-0.331*x2^2 || log(U) < 0.5*x2+d*(1.0-v+log(v))
+            return d*v
+        end
     end
 end
+
 @_jl_rand_matrix_builder_1arg Float64 randg
 
 # randchi2()
@@ -236,7 +247,7 @@ const chi2rnd = randchi2 # alias chi2rnd
 # http://www.johndcook.com/julia_rng.html
 function randbeta(a, b)
     if a <= 0 || b <= 0
-        error("Beta parameters must be positive")
+        error("beta parameters must be positive")
     end
     
     ## There are more efficient methods for generating beta samples.

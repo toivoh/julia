@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#ifdef __WIN32__
+#include <malloc.h>
+#endif
 #include "julia.h"
 
 // array constructors ---------------------------------------------------------
@@ -99,22 +102,25 @@ jl_array_t *jl_reshape_array(jl_type_t *atype, jl_array_t *data,
     a->type = atype;
     *((jl_array_t**)(&a->_space[0] + ndimwords*sizeof(size_t))) = data;
     a->data = data->data;
-    a->length = data->length;
     a->elsize = data->elsize;
     a->ndims = ndims;
     a->ptrarray = data->ptrarray;
     a->reshaped = 1;
 
     if (ndims == 1) {
+        a->length = jl_unbox_long(jl_tupleref(dims,0));
         a->nrows = a->length;
         a->maxsize = a->length;
         a->offset = 0;
     }
     else {
         size_t *adims = &a->nrows;
+        size_t l=1;
         for(i=0; i < ndims; i++) {
             adims[i] = jl_unbox_long(jl_tupleref(dims, i));
+            l *= adims[i];
         }
+        a->length = l;
     }
     
     return a;
@@ -365,7 +371,7 @@ jl_value_t *jl_arrayref(jl_array_t *a, size_t i)
     else {
         elt = ((jl_value_t**)a->data)[i];
         if (elt == NULL) {
-            jl_undef_ref_error();
+            jl_raise(jl_undefref_exception);
         }
     }
     return elt;

@@ -39,6 +39,14 @@ function reinterpret{T,S}(::Type{T}, a::Array{S,1})
     nel = int(div(numel(a)*sizeof(S),sizeof(T)))
     ccall(:jl_reshape_array, Array{T,1}, (Any, Any, Any), Array{T,1}, a, (nel,))
 end
+
+function reinterpret{T,S}(::Type{T}, a::Array{S})
+    if sizeof(S) != sizeof(T)
+        error("reinterpret: result shape not specified")
+    end
+    reinterpret(T, a, size(a))
+end
+
 function reinterpret{T,S,N}(::Type{T}, a::Array{S}, dims::NTuple{N,Int})
     nel = div(numel(a)*sizeof(S),sizeof(T))
     if prod(dims) != nel
@@ -46,7 +54,7 @@ function reinterpret{T,S,N}(::Type{T}, a::Array{S}, dims::NTuple{N,Int})
     end
     ccall(:jl_reshape_array, Array{T,N}, (Any, Any, Any), Array{T,N}, a, dims)
 end
-reinterpret(t,x) = reinterpret(t,[x])[1]
+reinterpret(t::Type,x) = reinterpret(t,[x])[1]
 
 function reshape{T,N}(a::Array{T}, dims::NTuple{N,Int})
     if prod(dims) != numel(a)
@@ -97,7 +105,7 @@ function fill!{T<:Union(Int8,Uint8)}(a::Array{T}, x::Integer)
 end
 function fill!{T<:Union(Integer,Float)}(a::Array{T}, x)
     if isa(T,BitsKind) && convert(T,x) == 0
-        ccall(:bzero, Void, (Ptr{T}, Int), a, length(a)*sizeof(T))
+        ccall(:memset, Ptr{T}, (Ptr{T}, Int32, Int32), a,0,length(a)*sizeof(T))
     else
         for i = 1:numel(a)
             a[i] = x
@@ -156,7 +164,9 @@ logspace(start::Real, stop::Real) = logspace(start, stop, 50)
 
 ## Conversions ##
 
+convert{T,n}(::Type{Array{T}}, x::Array{T,n}) = x
 convert{T,n}(::Type{Array{T,n}}, x::Array{T,n}) = x
+convert{T,n,S}(::Type{Array{T}}, x::Array{S,n}) = convert(Array{T,n}, x)
 convert{T,n,S}(::Type{Array{T,n}}, x::Array{S,n}) = copy_to(similar(x,T), x)
 
 ## Indexing: ref ##
@@ -653,7 +663,7 @@ end
 function .^{S<:Integer,T<:Integer}(A::Array{S}, B::Array{T})
     F = Array(Float64, promote_shape(size(A), size(B)))
     for i=1:numel(A)
-        F[i] = A[i]^B[i]
+        F[i] = float64(A[i])^float64(B[i])
     end
     return F
 end
@@ -661,14 +671,14 @@ end
 function .^{T<:Integer}(A::Integer, B::Array{T})
     F = similar(B, Float64)
     for i=1:numel(B)
-        F[i] = A^B[i]
+        F[i] = float64(A)^float64(B[i])
     end
     return F
 end
 
-function _jl_power_array_int_body(F, A, B)
+function _jl_power_array_int_body{T}(F::Array{T}, A, B)
     for i=1:numel(A)
-        F[i] = A[i]^B
+        F[i] = A[i]^convert(T,B)
     end
     return F
 end
@@ -741,45 +751,19 @@ end
 
 ## Binary comparison operators ##
 
-function _jl_compare_array_to_array(isf::Function, A::Array, B::Array)
-    F = Array(Bool, promote_shape(size(A),size(B)))
-    for i = 1:numel(B)
-        F[i] = isf(A[i], B[i])
-    end
-    return F
-end
-function _jl_compare_scalar_to_array(isf::Function, A, B::Array)
-    F = similar(B, Bool)
-    for i = 1:numel(B)
-        F[i] = isf(A, B[i])
-    end
-    return F
-end
-function _jl_compare_array_to_scalar(isf::Function, A::Array, B)
-    F = similar(A, Bool)
-    for i = 1:numel(A)
-        F[i] = isf(A[i], B)
-    end
-    return F
-end
-# TODO: restrict scalar/array comparisons as soon as issue #804 is
-#       solved.
-#       we need to substitute:
-#           ($f)(A, B::Array) = _jl_compare_scalar_to_array($isf, A, B)
-#       with:
-#           ($f){T}(A::T, B::Array{T}) = _jl_compare_scalar_to_array($isf, A, B)
-#       etc.
-#       (and then add spcialized String versions, similar to those for Numbers)
-#
-for (f,isf) in ((:(==),:isequal), (:(<), :isless),
-        (:(!=),:((x,y)->!isequal(x,y))), (:(<=), :((x,y)->!isless(y,x))))
+for (f,scalarf) in ((:(.==),:(==)), (:.<, :<), (:.!=,:!=), (:.<=,:<=))
     @eval begin
-        ($f)(A::Array, B::Array) = _jl_compare_array_to_array($isf, A, B)
-        ($f){T<:Number,S<:Number}(A::Array{T}, B::Array{S}) = _jl_compare_array_to_array($f, A, B)
-        ($f)(A, B::Array) = _jl_compare_scalar_to_array($isf, A, B)
-        ($f){T<:Number,S<:Number}(A::T, B::Array{S}) = _jl_compare_scalar_to_array($f, A, B)
-        ($f)(A::Array, B) = _jl_compare_array_to_scalar($isf, A, B)
-        ($f){T<:Number,S<:Number}(A::Array{T}, B::S) = _jl_compare_array_to_scalar($f, A, B)
+        function ($f)(A::AbstractArray, B::AbstractArray)
+            F = Array(Bool, promote_shape(size(A),size(B)))
+            for i = 1:numel(B)
+                F[i] = ($scalarf)(A[i], B[i])
+            end
+            return F
+        end
+        ($f)(A, B::AbstractArray) =
+            reshape([ ($scalarf)(A, B[i]) for i=1:length(B)], size(B))
+        ($f)(A::AbstractArray, B) =
+            reshape([ ($scalarf)(A[i], B) for i=1:length(A)], size(A))
     end
 end
 
