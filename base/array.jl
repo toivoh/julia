@@ -242,7 +242,7 @@ function ref{T<:Integer}(A::Vector, I::AbstractVector{T})
     end
     X
 end
-#ref{T<:Integer}(A::Vector, I::AbstractVector{T}) = [ A[i] for i=I ]
+# ref{T<:Integer}(A::Vector, I::AbstractVector{T}) = [ A[i] for i=I ]
 ref{T<:Integer}(A::AbstractVector, I::AbstractVector{T}) = [ A[i] for i=I ]
 
 ref{T<:Integer}(A::Matrix, I::AbstractVector{T}, j::Integer) = [ A[i,j] for i=I ]
