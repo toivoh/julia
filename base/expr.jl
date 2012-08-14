@@ -6,7 +6,6 @@ symbol(a::Array{Uint8,1}) =
     ccall(:jl_symbol_n, Any, (Ptr{Uint8}, Int32), a, length(a))::Symbol
 
 gensym() = ccall(:jl_gensym, Any, ())::Symbol
-gensym(n::Integer) = ntuple(n, i->gensym())
 
 gensym(s::ASCIIString) = gensym(s.data)
 gensym(s::UTF8String) = gensym(s.data)
@@ -33,6 +32,7 @@ copy(e::Expr) = Expr(e.head, isempty(e.args) ? e.args : astcopy(e.args), e.typ)
 copy(s::SymbolNode) = SymbolNode(s.name, s.typ)
 copy(n::GetfieldNode) = GetfieldNode(n.value, n.name, n.typ)
 
+# copy parts of an AST that the compiler mutates
 astcopy(x::Union(SymbolNode,GetfieldNode,Expr)) = copy(x)
 astcopy(x::Array{Any,1}) = map(astcopy, x)
 astcopy(x) = x
@@ -60,8 +60,4 @@ expand(x) = ccall(:jl_expand, Any, (Any,), x)
 
 macro eval(x)
     :(eval($expr(:quote,x)))
-end
-
-macro task(ex)
-    :(Task(()->$esc(ex)))
 end
