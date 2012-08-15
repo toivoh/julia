@@ -3,10 +3,88 @@
 show(x) = show(OUTPUT_STREAM::IOStream, x)
 
 print(io::IOStream, s::Symbol) = ccall(:jl_print_symbol, Void, (Ptr{Void}, Any,), io, s)
-show(io, x) = ccall(:jl_show_any, Void, (Any, Any,), io::IOStream, x)
+show(io, x) = isa(io,IOStream) ? ccall(:jl_show_any, Void, (Any,Any,), io, x) :
+              print(io, repr(x))
 
 showcompact(io, x) = show(io, x)
 showcompact(x)     = showcompact(OUTPUT_STREAM::IOStream, x)
+
+## Indentation aware wrapper IO ##
+
+const indent_width = 4
+
+type IndentIO <: IO
+    sink::IO
+    indent::Integer  # current indentation
+end
+IndentIO(sink::IO) = IndentIO(sink, 0)
+
+function print(io::IndentIO, c::Char)
+    print(io.sink, c)
+    if (c == '\n'); print(io.sink, " "^io.indent); end
+end
+
+type Indent; end
+const indent = Indent()
+enter(io::IO,       ::Indent) = enter(IndentIO(io), indent)
+enter(io::IndentIO, ::Indent) = (io.indent += indent_width; io)
+leave(io::IndentIO, ::Indent) = (io.indent -= indent_width; io)
+
+macro indent(io, body)
+    io = esc(io)
+    :( ($io)=enter(($io), indent); r=($body); ($io)=leave(($io), indent); r )
+end
+
+# Capture character output and send it to print(::IndentIO, ::Char)
+write(io::IndentIO, x::Uint8)       = print(io, char(x))
+write(io::IndentIO, s::ASCIIString) = (for c in s; print(io, c); end)
+# Work around some types that do funky stuff in show()
+show(io::IndentIO, x::Float32) = print(io, string(x))
+show(io::IndentIO, x::Float64) = print(io, string(x))
+show(io::IndentIO, x::Symbol)  = print(io, string(x))
+
+## Simple printing convenience macro ##
+
+# @pprint(io, args...) expands into
+#
+#     (@pprint(io, args[1])); (@pprint(io, args[2])); ... etc
+#
+# and then according to
+#
+#     @pprint(io, [f](args...))       ==>  f(io, args...)
+#     @pprint(io, [indent]{args...})  ==>  @pprint(io, args...)   # (indented)
+#     @pprint(io, expression)         ==>  print(io, expression)  # otherwise
+#
+# Example: @pprint(io, '(',[indent]{ 
+#              [show](x), '+', [show](y) 
+#          },')')
+
+const pp_io = gensym("io")
+
+macro pprint(args...) code_pprint(args...) end
+function code_pprint(io, args...)
+    esc(expr(:block, :(($pp_io) = ($io)), recode_pprint(args...), :nothing))
+end
+
+recode_pprint(exs...) = expr(:block, {recode_pprint(ex) for ex in exs})
+function recode_pprint(ex::Expr)
+    head, args = ex.head, ex.args    
+    if head === :curly && is_expr(args[1], :vcat, 1)  # e g [indent]{x, '+', y}
+        env = args[1].args[1]
+        quote
+            ($pp_io) = ($expr(:quote, enter))(($pp_io),($env))
+            ($recode_pprint(args[2:end]...))  # ==> e g @pprint(io, x, '+', y)
+            ($pp_io) = ($expr(:quote, leave))(($pp_io),($env))
+        end
+    elseif head === :call && is_expr(args[1], :vcat, 1) # e g [show](x)
+        f, rest_args = args[1].args[1], args[2:end]
+        :( ($f)(($pp_io), $rest_args...) )    # ==> e g show(io, x)
+    else
+        :( print(($pp_io), ($ex)) )                     # regular printing
+    end                                             
+end
+recode_pprint(ex) = :(print(($pp_io), ($ex)))           # regular printing
+
 
 show(io, s::Symbol) = print(io, s)
 show(io, tn::TypeName) = show(io, tn.name)
