@@ -119,6 +119,12 @@ function show_indented(io::IO, sym::Symbol, indent::Int)
     else                              print(io, ":$sym")        
     end
 end
+function show_indented(io::IO, ex::ExprNode, indent::Int)
+    default_show_quoted(io, ex, indent)
+end
+function show_indented(io::IO, ex::QuoteNode, indent::Int)
+    show_indented(io, ex.value, indent)
+end
 function default_show_quoted(io::IO, ex, indent::Int)
     print(io, ":( ")
     show_unquoted(io, ex, indent + indent_width)
