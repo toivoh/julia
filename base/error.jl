@@ -22,19 +22,27 @@ assert(x) = assert(x,'?')
 assert(x,labl) = x ? nothing : throw(AssertionError(string(labl)))
 
 # @assert is for things that should never happen
-macro assert(ex)
-    :($(esc(ex)) ? nothing : throw(AssertionError($(string(ex)))))
+macro assert(e)
+    :($(esc(e)) ? nothing : throw(AssertionError($(sprint(show_unquoted,e)))))
 end
+
 # @expect is for things that might happen
 # if e.g. a function is called with the wrong arguments
+# usage:
+#                                         # x > 5 ==>
+#    @expect x <= 5                       # error("expected: (x <= 5) == true")
+#    @expect x <= 5 KeyError(x)           # error(KeyError(5))
+#    @expect x <= 5 msg ArgumentError(msg) 
+#    # fails ==> error(ArgumentError("expected: (x <= 5) == true"))
 macro expect(args...)
-    if !(1 <= length(args) <= 2)
-        error("@expect: expected one or two arguments")
-    end
-    pred = args[1]
-    err = (length(args) == 2) ? args[2] : :_msg
+    code_expect(args...)
+end
+code_expect(pred) =  (msym = gensym(); code_expect(pred, msym,     msym))
+code_expect(pred, err)               = code_expect(pred, gensym(), err)
+function code_expect(pred, msym::Symbol, err)
+    msg = string("expected ", sprint(show_unquoted,pred), " == true")    
     esc(:( if !($pred)
-        let _msg = $(string("expected ",sprint(show_unquoted,pred)," == true"))
+        let $msym = $(expr(:quote, msg))
             error($err)
         end
     end))
